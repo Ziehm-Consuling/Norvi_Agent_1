@@ -119,6 +119,9 @@ unsigned long previousMillis = 0;
 //Define a variable to store the last time Sensor data was sent
 unsigned long lastSensorValSentTime = 0;
 
+unsigned long last_modem_response=0;
+unsigned long millis_qmt_request=0;
+
 /********************************************************************************************************************TIME STURCTURE DEFINITION****************************************/
 struct Time {
     uint8_t hour;
@@ -911,6 +914,366 @@ void rebootModem() {
   }
 }
 
+//Check Modem Response
+bool modem_response_check() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 1300) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("OK")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_sim_check() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CPIN");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("OK")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_function() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CFUN?");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("+CFUN:1")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_setfunction() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CFUN=1");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("OK")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_check_reg() {
+  bool response = false;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CEREG?");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      if (Serial1.available()) {
+        String command = Serial1.readStringUntil('\n');
+        if (command.startsWith("+CEREG:")) {
+          int commaIndex = command.indexOf(',');
+          if (commaIndex > -1) {
+            int status = command.substring(commaIndex + 1).toInt();
+            if (status == 1 || status == 5) {
+              response = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (response) {
+      break;
+    }
+  }
+  return response;
+}
+
+bool modem_setreg() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CEREG=1");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("OK")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_check_cgatt() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CGATT?");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("+CGATT:1")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_set_apn(const String& apn) {
+  // Send AT command
+  bool response=0;
+
+  String cgdcontCmd = "AT+CGDCONT=1,\"IP\",\"" + apn + "\"";
+        Serial1.println(cgdcontCmd);
+        Serial.println(cgdcontCmd);
+        previousMillis = millis();
+        while (millis() - previousMillis < 5000) {
+            monitorSerial1();
+            if (Serial1.find("OK")) {
+              response=1;
+              break;
+            }
+        }
+  return response;
+}
+
+bool modem_setcgatt() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CGATT=1");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("OK")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool isConnected() {
+    // Send the AT command to check MQTT connection status
+    String command = "AT+QMTCONN?";
+    Serial1.println(command);
+    Serial.println(command);
+    
+    // Wait for response
+    previousMillis = millis();
+    while (millis() - previousMillis < 8000) {
+        monitorSerial1();
+        if (Serial1.find("+QMTCONN: 0,3")) {
+            Serial.println("--------------------------------------------------------------------------------------------------------------");     
+            Serial.println("MQTT Status: Connected!");
+            Serial.println("--------------------------------------------------------------------------------------------------------------");
+            return true;
+        } else if (Serial1.find("+QMTCONN: 0,2")) {
+            Serial.println("--------------------------------------------------------------------------------------------------------------");     
+            Serial.println("MQTT Status: Being Connected");
+            Serial.println("--------------------------------------------------------------------------------------------------------------");
+            return true;
+        } else if (Serial1.find("+QMTCONN: 0,1")) {
+            Serial.println("--------------------------------------------------------------------------------------------------------------");     
+            Serial.println("MQTT Status: Initializing");
+            Serial.println("--------------------------------------------------------------------------------------------------------------");
+            return true;
+        } else if (Serial1.find("+QMTCONN: 0,4")) {
+            Serial.println("--------------------------------------------------------------------------------------------------------------");     
+            Serial.println("MQTT Status: Disconnected");
+            Serial.println("--------------------------------------------------------------------------------------------------------------");
+            return false;
+        }
+    }
+    // If no response received within timeout, consider it disconnected
+    Serial.println("--------------------------------------------------------------------------------------------------------------");
+    Serial.println("MQTT Status: Disconnected (Timeout)");
+    Serial.println("--------------------------------------------------------------------------------------------------------------");
+    return false;
+}
+
+bool modem_set_broker(const String& server,int port) {
+  // Send AT command
+  bool response=0;
+
+  String qmtopenCmd = "AT+QMTOPEN=0,\"" + server + "\"," + String(port);
+  Serial1.println(qmtopenCmd);
+  Serial.println(qmtopenCmd);
+  previousMillis = millis();
+  while (millis() - previousMillis < 1000) {
+    monitorSerial1();
+    if (Serial1.find("OK")){
+      response=1;
+      break;
+    } 
+    if (Serial1.find("ERROR")){Serial.println("Retry MQTT OPEN");};
+  }
+  return response;
+}
+
+bool modem_qmt_wait() {
+  // Send AT command
+  bool response=0;
+    monitorSerial1();
+    if (Serial1.find("+QMTOPEN: 0,0")){
+      response=1;
+      break;
+    } 
+ 
+  return response;
+}
+
+bool modem_broker_stat() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+QMTOPEN?");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("+QMTOPEN: 0")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
+bool modem_conn_broker(const String& user, const String& password, const String& clientId) {
+  // Send AT command
+  bool response=0;
+
+  String qmtconnCmd = "AT+QMTCONN=0,\"" + clientId + "\",\"" + user + "\",\"" + password + "\"";
+  Serial1.println(qmtopenCmd);
+  Serial.println(qmtopenCmd);
+  previousMillis = millis();
+  while (millis() - previousMillis < 1000) {
+    monitorSerial1();
+    if (Serial1.find("OK")){
+      response=1;
+      break;
+    } 
+    if (Serial1.find("ERROR")){Serial.println("Retry MQTT CONN");};
+  }
+  return response;
+}
+
+bool modem_conn_wait() {
+  // Send AT command
+  bool response=0;
+    monitorSerial1();
+    if (Serial1.find("+QMTCONN")){
+      response=1;
+      break;
+    } 
+ 
+  return response;
+}
+
+
+void modem_maintain(){
+  //last_modem_response
+  
+  if(modem_status==0){
+     if(modem_response_check())modem_status=1; 
+  } 
+  if(modem_status==1){
+     if(modem_sim_check())modem_status=2; 
+  } 
+  if(modem_status==2){
+     if(modem_function())modem_status=4; 
+     else modem_status=3; 
+  } 
+  if(modem_status==3){
+    if(modem_setfunction())modem_status=2;  
+  }
+  if(modem_status==4){
+    if(modem_check_reg())modem_status=6;  
+    else modem_status=5;  
+  }
+  if(modem_status==5){
+    if(modem_setreg())modem_status=4;  
+  }  
+  if(modem_status==6){
+    if(modem_check_cgatt())modem_status=9;  
+    else modem_status=7;
+  }
+  if(modem_status==7){
+    if(modem_set_apn(NETWORK_APN))modem_status=8;  
+  }
+  if(modem_status==8){
+    if(modem_setcgatt())modem_status=6;  
+  }
+  if(modem_status==9){
+    Serial.println("Network Successfully Activated"); 
+    if(isConnected())modem_status=15; 
+    else modem_status=10; 
+  }
+  if(modem_status==10){
+    if(modem_set_broker(MQTT_SERVER,MQTT_PORT)){
+      modem_status=11; 
+      millis_qmt_request = millis();
+    }  
+  }
+  if(modem_status==11){
+    if(modem_qmt_wait())modem_status=12;
+    if (millis() - millis_qmt_request > 60000) modem_status=6;
+  }
+  if(modem_status==12){
+    if(modem_broker_stat())modem_status=13;
+    else modem_status=6;
+  }  
+  
+  if(modem_status==13){
+    if(modem_conn_broker(MQTT_USER,MQTT_PW,MQTT_ID)){
+      millis_qmt_request = millis();
+      modem_status=14;
+    }
+    else modem_status=6;  
+  }  
+
+  if(modem_status==14){
+    if(modem_conn_wait())modem_status=9;
+    if (millis() - millis_qmt_request > 60000) modem_status=6;
+  }
+  if(modem_status==15){
+    Serial.println("Connected to Broker Successfully"); 
+  }
+
+  
+
+}
+
+
+
 /********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
 void setup() {
     Serial.begin(9600);
@@ -956,6 +1319,17 @@ void setup() {
 }
 
 void loop() {
+
+
+
+
+
+
+
+
+
+
+
   // Check if it's time to send sensor data again
   if (millis() - lastSensorValSentTime >= SENSOR_SEND_INTERVAL) {
     // Update the last sensor value sent time
