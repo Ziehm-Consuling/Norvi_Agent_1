@@ -86,7 +86,7 @@ String DAY5 = "1-17-2024";
 /**********************************************************************************************************************************/
 //Modem Serial Pins
 #define RX_PIN 4 // ESP32 RX pin
-#define TX_PIN 5 // ESP32 TX pin
+#define TX_PIN 2 // ESP32 TX pin
 #define BAUD_RATE 9600 // Baud rate for ESP32 UART communication
 /**********************************************************************************************************************************/
 // Define MQTT topics
@@ -109,7 +109,7 @@ float current = 12.5;
 /**********************************************************************************************************************************/
 //Define a constant for the interval (in milliseconds)
 #define MQTT_CHECK_INTERVAL  10000 // 10 seconds
-#define SENSOR_SEND_INTERVAL  60000 // 60 seconds
+#define SENSOR_SEND_INTERVAL  15000 // 60 seconds
 /**********************************************************************************************************************************/
 //Get the current time
 unsigned long currentMillis = 0;
@@ -119,8 +119,9 @@ unsigned long previousMillis = 0;
 //Define a variable to store the last time Sensor data was sent
 unsigned long lastSensorValSentTime = 0;
 
-unsigned long last_modem_response=0;
 unsigned long millis_qmt_request=0;
+unsigned int modem_status=0;
+unsigned int error_count[25];
 
 /********************************************************************************************************************TIME STURCTURE DEFINITION****************************************/
 struct Time {
@@ -494,44 +495,7 @@ void registerOnNetwork(const String& apn) {
     }
 }
 
-/********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
-// Function to connect to MQTT Broker
-void connectToMQTTBroker(const String& server, const String& user, int port, const String& password, const String& clientId) {
-  // Send QMTOPEN command
-  OpenMQ:;
-  String qmtopenCmd = "AT+QMTOPEN=0,\"" + server + "\"," + String(port);
-  Serial1.println(qmtopenCmd);
-  Serial.println(qmtopenCmd);
-  previousMillis = millis();
-  while (millis() - previousMillis < 10000) {
-    monitorSerial1();
-    if (Serial1.find("OK")) break;
-    if (Serial1.find("ERROR")){Serial.println("Retry MQTT OPEN");delay(3000); goto OpenMQ;};
-  }
-  previousMillis = millis();
-  while (millis() - previousMillis < 15000) {
-    monitorSerial1();
-    if (Serial1.find("+QMTOPEN")) break;
-  }
-  // Send QMTCONN command
-  ConnMQ:;
-  String qmtconnCmd = "AT+QMTCONN=0,\"" + clientId + "\",\"" + user + "\",\"" + password + "\"";
-  Serial1.println(qmtconnCmd);
-  Serial.println(qmtconnCmd);
-  previousMillis = millis();
-  while (millis() - previousMillis < 10000) {
-    monitorSerial1();
-    if (Serial1.find("OK")) break;
-    if (Serial1.find("ERROR")){Serial.println("Retry MQTT CONN");delay(3000); goto ConnMQ;};
-  }
-  previousMillis = millis();
-  while (millis() - previousMillis < 15000) {
-    monitorSerial1();
-    if (Serial1.find("+QMTCONN")) break;
-  }
-  Serial.println("Successfully connected to MQTT broker.");
-}
-/********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
+
 // Function to subscribe to MQTT topics one at a time
 void subscribeToMQTTTopic(const String& topic) {
   // Send QMTSUB command
@@ -936,7 +900,7 @@ bool modem_sim_check() {
   // Send AT command
   bool response=0;
   for (int i = 0; i < 3; i++) {
-    Serial1.println("AT+CPIN");
+    Serial1.println("AT+CPIN?");
     unsigned long previousMillis = millis();
     while (millis() - previousMillis < 500) {
       monitorSerial1();
@@ -1080,44 +1044,7 @@ bool modem_setcgatt() {
   return response;
 }
 
-bool isConnected() {
-    // Send the AT command to check MQTT connection status
-    String command = "AT+QMTCONN?";
-    Serial1.println(command);
-    Serial.println(command);
-    
-    // Wait for response
-    previousMillis = millis();
-    while (millis() - previousMillis < 8000) {
-        monitorSerial1();
-        if (Serial1.find("+QMTCONN: 0,3")) {
-            Serial.println("--------------------------------------------------------------------------------------------------------------");     
-            Serial.println("MQTT Status: Connected!");
-            Serial.println("--------------------------------------------------------------------------------------------------------------");
-            return true;
-        } else if (Serial1.find("+QMTCONN: 0,2")) {
-            Serial.println("--------------------------------------------------------------------------------------------------------------");     
-            Serial.println("MQTT Status: Being Connected");
-            Serial.println("--------------------------------------------------------------------------------------------------------------");
-            return true;
-        } else if (Serial1.find("+QMTCONN: 0,1")) {
-            Serial.println("--------------------------------------------------------------------------------------------------------------");     
-            Serial.println("MQTT Status: Initializing");
-            Serial.println("--------------------------------------------------------------------------------------------------------------");
-            return true;
-        } else if (Serial1.find("+QMTCONN: 0,4")) {
-            Serial.println("--------------------------------------------------------------------------------------------------------------");     
-            Serial.println("MQTT Status: Disconnected");
-            Serial.println("--------------------------------------------------------------------------------------------------------------");
-            return false;
-        }
-    }
-    // If no response received within timeout, consider it disconnected
-    Serial.println("--------------------------------------------------------------------------------------------------------------");
-    Serial.println("MQTT Status: Disconnected (Timeout)");
-    Serial.println("--------------------------------------------------------------------------------------------------------------");
-    return false;
-}
+
 
 bool modem_set_broker(const String& server,int port) {
   // Send AT command
@@ -1144,7 +1071,6 @@ bool modem_qmt_wait() {
     monitorSerial1();
     if (Serial1.find("+QMTOPEN: 0,0")){
       response=1;
-      break;
     } 
  
   return response;
@@ -1172,8 +1098,8 @@ bool modem_conn_broker(const String& user, const String& password, const String&
   bool response=0;
 
   String qmtconnCmd = "AT+QMTCONN=0,\"" + clientId + "\",\"" + user + "\",\"" + password + "\"";
-  Serial1.println(qmtopenCmd);
-  Serial.println(qmtopenCmd);
+  Serial1.println(qmtconnCmd);
+  Serial.println(qmtconnCmd);
   previousMillis = millis();
   while (millis() - previousMillis < 1000) {
     monitorSerial1();
@@ -1192,11 +1118,28 @@ bool modem_conn_wait() {
     monitorSerial1();
     if (Serial1.find("+QMTCONN")){
       response=1;
-      break;
     } 
  
   return response;
 }
+
+bool modem_disable() {
+  // Send AT command
+  bool response=0;
+  for (int i = 0; i < 3; i++) {
+    Serial1.println("AT+CFUN=0");
+    unsigned long previousMillis = millis();
+    while (millis() - previousMillis < 500) {
+      monitorSerial1();
+      String command = Serial1.readStringUntil('\n');
+      if (command.startsWith("OK")) {
+        response =1;
+        break;
+      }
+  }}
+  return response;
+}
+
 
 
 void modem_maintain(){
@@ -1213,14 +1156,19 @@ void modem_maintain(){
      else modem_status=3; 
   } 
   if(modem_status==3){
-    if(modem_setfunction())modem_status=2;  
+    if(modem_setfunction())modem_status=5;  
   }
   if(modem_status==4){
     if(modem_check_reg())modem_status=6;  
-    else modem_status=5;  
+    else {
+     modem_status=5;
+        
+    }
   }
   if(modem_status==5){
-    if(modem_setreg())modem_status=4;  
+    if(modem_setreg())modem_status=7;
+    
+      
   }  
   if(modem_status==6){
     if(modem_check_cgatt())modem_status=9;  
@@ -1245,7 +1193,7 @@ void modem_maintain(){
   }
   if(modem_status==11){
     if(modem_qmt_wait())modem_status=12;
-    if (millis() - millis_qmt_request > 60000) modem_status=6;
+    if (millis() - millis_qmt_request > 600000) modem_status=6;
   }
   if(modem_status==12){
     if(modem_broker_stat())modem_status=13;
@@ -1266,103 +1214,25 @@ void modem_maintain(){
   }
   if(modem_status==15){
     Serial.println("Connected to Broker Successfully"); 
-  }
-
-  
-
-}
-
-
-
-/********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
-void setup() {
-    Serial.begin(9600);
-    Serial1.begin(BAUD_RATE, SERIAL_8N1, RX_PIN, TX_PIN);
-    delay(1000);
-    // Initialize EEPROM
-    EEPROM.begin(512);
-    delay(1000);
-    Serial.println("*************************************************Setup Starting Setup!*****************************************************");
-
-    // Reboot Modem
-    rebootModem();
-
-    // Register on the network with APN
-    Serial.println("-----------------------Starting the Registration to Network with APN---------------------------------------");
-    registerOnNetwork(NETWORK_APN);
-
-    // Connect to MQTT Broker
-    Serial.println("------------------------------Connecting to MQTT Broker----------------------------------------------------");
-    connectToMQTTBroker(MQTT_SERVER, MQTT_USER, MQTT_PORT, MQTT_PW, MQTT_ID);
-
-    // Subscribe to MQTT topics
-    Serial.println("-----------------------------Subscribing to defined Topics-------------------------------------------------");
     subscribeToMQTTTopic(MQTT_TOPIC_1);
     subscribeToMQTTTopic(MQTT_TOPIC_2);
     subscribeToMQTTTopic(MQTT_TOPIC_3);
-
-    // Call the function to publish device info at boot
-    Serial.println("------------------------------------Publishing Device Info-------------------------------------------------");
     publishDeviceInfo(firmwareVersion, serialNumber);
+    modem_status=16;
+  }
+  if(modem_status==17){
+    Serial.println("Modem Disabled"); 
+    if(modem_disable())modem_status=2;
+  }
 
-    // Call the function to publish sensor values every 60 seconds
-    Serial.println("-----------------------------------Publishing Sensor Values-------------------------------------------------");
-    publishSensorValues(energy, current);
+  
 
-    //Get last saved values in the EEPROM
-    Serial.println("-------------------------------------Get values From EEPROM-------------------------------------------------");
-    GetLastSaveValues();
-    WeekdayUpdate();//update Week days int values
-    SpecialDayUpdate();//Update special days
-
-    Serial.println("**********************************Setup Successfully executed!********************************************");
 }
 
-void loop() {
-
-
-
-
-
-
-
-
-
-
-
-  // Check if it's time to send sensor data again
-  if (millis() - lastSensorValSentTime >= SENSOR_SEND_INTERVAL) {
-    // Update the last sensor value sent time
-    lastSensorValSentTime = millis();
-    publishSensorValues(energy, current); // Assuming ENERGY_VALUE and CURRENT_VALUE are variables holding the sensor values
-  }
-  
-  // Check if it's time to check MQTT connection status
-  if (millis() - lastMQTTCheckTime >= MQTT_CHECK_INTERVAL) {
-    lastMQTTCheckTime = millis();
-    if (!isConnected()) {
-      // If not connected, register on the network and connect to MQTT broker
-      registerOnNetwork(NETWORK_APN);
-      connectToMQTTBroker(MQTT_SERVER, MQTT_USER, MQTT_PORT, MQTT_PW, MQTT_ID);
-      subscribeToMQTTTopic(MQTT_TOPIC_1);
-      subscribeToMQTTTopic(MQTT_TOPIC_2);
-      subscribeToMQTTTopic(MQTT_TOPIC_3);
-    }
-  }
-    // Monitor Serial1 transactions
-    monitorSerial1();
-
-    if(Ignore){
-      //reset to ignore the sent loop    
-      payload = "";
-      mqttMessage = "";
-  };
-    // Check if the received message starts with "+QMTRECV"
-    if (mqttMessage.startsWith("+QMTRECV")) {
-    if(Ignore){
-          payload = String("No payload!");
-          mqttMessage = String("No message!");
-  };
+void handle_received(){
+      monitorSerial1();
+      if (mqttMessage.startsWith("+QMTRECV")) {
+ 
       // Print the received message
       Serial.println("--------------------------------------------------------------------------------------------------------------");
       Serial.print("Received Message:");
@@ -1408,13 +1278,45 @@ void loop() {
         }
       }
     }
-  ;
-    if(Ignore){ 
-      //reset to ignore the sent loop    
-        payload = "";
-        mqttMessage = "";
-        Ignore = false;
-    };
+
+
+}
+
+void tx_mqtt(){
+  if(isConnected()){
+        publishSensorValues(energy, current);
+  }
+  else modem_status=9;
+   
+}
+/********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
+void setup() {
+    Serial.begin(9600);
+    Serial1.begin(BAUD_RATE, SERIAL_8N1, RX_PIN, TX_PIN);
+    delay(1000);
+    // Initialize EEPROM
+    EEPROM.begin(512);
+    delay(1000);
+    Serial.println("*************************************************Setup Starting Setup!*****************************************************");
+    error_count[5]=0;
+   
+
+    Serial.println("**********************************Setup Successfully executed!********************************************");
+}
+
+void loop() {
+//  Serial.print("Response : ");Serial.println(modem_response_check());
+//  delay(1000);
+//  Serial.print("Reg Check : ");Serial.println(modem_check_reg());
+ modem_maintain(); delay(100);
+ Serial.print("MS : ");Serial.print(modem_status); Serial.print(" EC : ");Serial.println(error_count[5]); 
+ handle_received();
+  if (millis() - lastSensorValSentTime >= SENSOR_SEND_INTERVAL) {
+    // Update the last sensor value sent time
+    lastSensorValSentTime = millis();
+    if(modem_status==16)tx_mqtt();
+  }
+ 
 }
 
 /********************************************************************************************************************WRITE STRING FUNCTION****************************************/
