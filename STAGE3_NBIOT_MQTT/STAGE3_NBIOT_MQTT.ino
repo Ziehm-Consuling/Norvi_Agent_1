@@ -120,7 +120,9 @@ unsigned long previousMillis = 0;
 unsigned long lastSensorValSentTime = 0;
 
 unsigned long millis_qmt_request=0;
+
 unsigned int modem_status=0;
+
 unsigned int error_count[25];
 
 /********************************************************************************************************************TIME STURCTURE DEFINITION****************************************/
@@ -495,7 +497,44 @@ void registerOnNetwork(const String& apn) {
     }
 }
 
-
+/********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
+// Function to connect to MQTT Broker
+void connectToMQTTBroker(const String& server, const String& user, int port, const String& password, const String& clientId) {
+  // Send QMTOPEN command
+  OpenMQ:;
+  String qmtopenCmd = "AT+QMTOPEN=0,\"" + server + "\"," + String(port);
+  Serial1.println(qmtopenCmd);
+  Serial.println(qmtopenCmd);
+  previousMillis = millis();
+  while (millis() - previousMillis < 10000) {
+    monitorSerial1();
+    if (Serial1.find("OK")) break;
+    if (Serial1.find("ERROR")){Serial.println("Retry MQTT OPEN");delay(3000); goto OpenMQ;};
+  }
+  previousMillis = millis();
+  while (millis() - previousMillis < 15000) {
+    monitorSerial1();
+    if (Serial1.find("+QMTOPEN")) break;
+  }
+  // Send QMTCONN command
+  ConnMQ:;
+  String qmtconnCmd = "AT+QMTCONN=0,\"" + clientId + "\",\"" + user + "\",\"" + password + "\"";
+  Serial1.println(qmtconnCmd);
+  Serial.println(qmtconnCmd);
+  previousMillis = millis();
+  while (millis() - previousMillis < 10000) {
+    monitorSerial1();
+    if (Serial1.find("OK")) break;
+    if (Serial1.find("ERROR")){Serial.println("Retry MQTT CONN");delay(3000); goto ConnMQ;};
+  }
+  previousMillis = millis();
+  while (millis() - previousMillis < 15000) {
+    monitorSerial1();
+    if (Serial1.find("+QMTCONN")) break;
+  }
+  Serial.println("Successfully connected to MQTT broker.");
+}
+/********************************************************************************************************************HANDLE SAVE FROM WEB FUNCTION****************************************/
 // Function to subscribe to MQTT topics one at a time
 void subscribeToMQTTTopic(const String& topic) {
   // Send QMTSUB command
@@ -604,7 +643,7 @@ void handleMQTTTopic1(const String& payload) {
       jsonDoc["message"] = "Rebooting device";
       // Publish the JSON document to MQTT topic MQTT_TOPIC_1
       publishMQTTMessage(jsonDoc, MQTT_TOPIC_1);
-      Ignore = true;
+      //Ignore = true;
       delay(1000);
       ESP.restart(); // Perform a device reboot
       //rebootModem();
@@ -707,7 +746,7 @@ void handleMQTTTopic2(const String& payload) {
 
         // Publish the constructed response payload
         publishMQTTMessage(responseJson, MQTT_TOPIC_5);
-        Ignore = true;
+        //Ignore = true;
     } else {
         Serial.println("No 'AC' field found in MQTT_TOPIC_2 payload");
         return;
@@ -849,7 +888,7 @@ void handleMQTTTopic3(const String& payload) {
 
         // Publish the constructed message
         publishMQTTMessage(doc, MQTT_TOPIC_3);
-        Ignore = true;
+        //Ignore = true;
 
     } else {
         Serial.println("No 'AC' field found in MQTT_TOPIC_2 payload");
@@ -1311,11 +1350,11 @@ void loop() {
  modem_maintain(); delay(100);
  Serial.print("MS : ");Serial.print(modem_status); Serial.print(" EC : ");Serial.println(error_count[5]); 
  handle_received();
-  if (millis() - lastSensorValSentTime >= SENSOR_SEND_INTERVAL) {
+ if (millis() - lastSensorValSentTime >= SENSOR_SEND_INTERVAL) {
     // Update the last sensor value sent time
     lastSensorValSentTime = millis();
     if(modem_status==16)tx_mqtt();
-  }
+ }
  
 }
 
