@@ -108,8 +108,8 @@ int energy = 65451;
 float current = 12.5;
 /**********************************************************************************************************************************/
 //Define a constant for the interval (in milliseconds)
-#define MQTT_CHECK_INTERVAL  10000 // 10 seconds
-#define SENSOR_SEND_INTERVAL  15000 // 60 seconds
+#define MQTT_CHECK_INTERVAL  15000 // 10 seconds
+#define SENSOR_SEND_INTERVAL  300000 // 60 seconds
 /**********************************************************************************************************************************/
 //Get the current time
 unsigned long currentMillis = 0;
@@ -1354,6 +1354,15 @@ void loop() {
     // Update the last sensor value sent time
     lastSensorValSentTime = millis();
     if(modem_status==16)tx_mqtt();
+ }
+
+  if (millis() - lastMQTTCheckTime >= MQTT_CHECK_INTERVAL) {
+    // Update the last sensor value sent time
+    lastMQTTCheckTime = millis();
+    if(!isConnected()){
+        modem_status=9;
+    }
+
  }
  
 }
