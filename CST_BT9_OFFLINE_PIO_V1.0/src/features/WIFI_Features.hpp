@@ -3,8 +3,6 @@
 
 
 #include <WebServer.h>
-#include "eeprom_variables.h"
-#include "eeprom_addresses.h"
 #include <EEPROM.h>  // Include EEPROM library
 #include <RTClib.h>
 
@@ -12,6 +10,7 @@ extern String currentSchedule;
 extern bool alarm_updated;
 extern bool power_output;
 
+extern WebServer server;
 
 void handleRoot();
 void handleConfigNetwork();

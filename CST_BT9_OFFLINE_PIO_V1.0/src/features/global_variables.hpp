@@ -1,5 +1,5 @@
-#ifndef EEPROM_VARIABLES_H
-#define EEPROM_VARIABLES_H
+#ifndef GLOBAL_VARIABLES_H
+#define GLOBAL_VARIABLES_H
 
 #include <Arduino.h>
 
@@ -72,7 +72,7 @@ extern String http_username;
 extern String http_password;
 
 
-extern WebServer server;
+
 
 //extern const int serverPort = 80;
 //WebServer server(serverPort);
